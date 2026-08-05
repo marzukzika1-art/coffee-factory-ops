@@ -7200,11 +7200,11 @@ function printInventoryReport(type) {
             printWindow.document.close();
         }
 
-// رابط ملف الداتا المباشر أونلاين على جيت هب
-const GITHUB_DATA_URL = "https://raw.githubusercontent.com/marzukzika1-art/coffee-factory-ops/main/data.json";
+// رابط الـ API الثابت الخاص بـ npoint للمصنع
+const NPOINT_URL = "https://api.npoint.io/72e2f8088a6698bcced0";
 
-// 1. دالة الحفظ أونلاين (بتحفظ محلياً وتجهيز ملف السحب المباشر)
-function silentAutoSave() {
+// 1. دالة الحفظ أونلاين (تستبدل الملف بالكامل أونلاين بضغطة زر)
+async function silentAutoSave() {
     try {
         const dataPayload = {
             masterLedger: typeof masterLedger !== 'undefined' ? masterLedger : [],
@@ -7212,60 +7212,61 @@ function silentAutoSave() {
             lastUpdated: new Date().toISOString()
         };
 
-        // حفظ محلياً للتأمين الفوري
-        localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(dataPayload.masterLedger));
-        localStorage.setItem('coffee_gold_classic_history', JSON.stringify(dataPayload.goldClassicMasterData));
+        const response = await fetch(NPOINT_URL, {
+            method: 'POST', // أو PUT حسب المنصة، npoint بتقبل POST لتحديث محتوى الـ Bin
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(dataPayload)
+        });
 
-        // تحميل ملف data.json تلقائياً عشان ترفعه بنقرة واحدة على جيت هب لو حابب تحدثه أونلاين للجميع
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataPayload, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", "data.json");
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
-
-        alert('✅ تم الحفظ بنجاح ونزل ملف التحديث (data.json). ارفعه على جيت هب عشان يسمع مع الكل أونلاين! 🚀');
+        if (response.ok) {
+            // حفظ نسخة محلية أيضاً لضمان السرعة القصوى
+            localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(dataPayload.masterLedger));
+            localStorage.setItem('coffee_gold_classic_history', JSON.stringify(dataPayload.goldClassicMasterData));
+            
+            alert('✅ تم حفظ واستبدال البيانات أونلاين على السيرفر بنجاح صاروخي! 🚀');
+        } else {
+            alert('❌ فشل الحفظ أونلاين، تحقق من الاتصال.');
+        }
     } catch (e) {
-        alert('⚠️ حدث خطأ أثناء الحفظ.');
+        alert('❌ حدث خطأ أثناء الاتصال بسيرفر الحفظ.');
     }
 }
 
-// دالة الاستعادة والتحديث السريعة الآمنة 100%
-function silentAutoLoad() {
+// 2. دالة التحديث / الاستعادة أونلاين (تسحب أحدث داتا من نفس الرابط الثابت)
+async function silentAutoLoad() {
     try {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.onchange = function(event) {
-            const file = event.target.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedData = JSON.parse(e.target.result);
-                    if (importedData.masterLedger) {
-                        masterLedger = importedData.masterLedger;
-                        localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
-                    }
-                    if (importedData.goldClassicMasterData) {
-                        goldClassicMasterData = importedData.goldClassicMasterData;
-                        localStorage.setItem('coffee_gold_classic_history', JSON.stringify(goldClassicMasterData));
-                    }
-                    if (typeof filterLedgerTable === 'function') filterLedgerTable();
-                    if (typeof updateSummaryCards === 'function') updateSummaryCards();
-                    alert('✅ تم تحديث واستعادة البيانات بنجاح صاروخي! 🚀');
-                } catch (err) {
-                    alert('❌ ملف البيانات غير صالح.');
+        const timestamp = new Date().getTime();
+        const response = await fetch(NPOINT_URL + '?t=' + timestamp, { cache: 'no-store' });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data && data.masterLedger) {
+                masterLedger = data.masterLedger;
+                if (data.goldClassicMasterData) {
+                    goldClassicMasterData = data.goldClassicMasterData;
                 }
-            };
-            reader.readAsText(file);
-        };
-        input.click();
+                
+                // تحديث الذاكرة المحلية للجهاز للسرعة
+                localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
+                localStorage.setItem('coffee_gold_classic_history', JSON.stringify(goldClassicMasterData));
+                
+                if (typeof filterLedgerTable === 'function') filterLedgerTable();
+                if (typeof updateSummaryCards === 'function') updateSummaryCards();
+                
+                alert('✅ تم سحب وتحديث البيانات أونلاين من الرابط السحابي في أقل من ثانية! ⚡');
+            } else {
+                alert('ℹ️ البيانات أونلاين فارغة حالياً.');
+            }
+        } else {
+            alert('❌ فشل سحب البيانات من السيرفر.');
+        }
     } catch (e) {
-        alert('❌ حدث خطأ أثناء التحديث.');
+        alert('❌ فشل الاتصال بالإنترنت أثناء التحديث.');
     }
 }
-
 		
         // نافذة تصفح واختيار ملف الأرشيف للتحديث اليدوي للأجهزة الأخرى
         function openQuickArchiveBrowser() {
