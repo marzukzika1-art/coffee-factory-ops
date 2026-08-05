@@ -7200,55 +7200,55 @@ function printInventoryReport(type) {
             printWindow.document.close();
         }
 
-// 1. دالة الحفظ السريع المباشر لجوجل شيت الجديد
-async function silentAutoSave() {
+// 1. دالة الحفظ السريع (تحفظ محلياً وتنزلك نسخة ملف احتياطي سحابي لو حابب)
+function silentAutoSave() {
     try {
         const dataPayload = {
             masterLedger: typeof masterLedger !== 'undefined' ? masterLedger : [],
-            goldClassicMasterData: typeof goldClassicMasterData !== 'undefined' ? goldClassicMasterData : {}
+            goldClassicMasterData: typeof goldClassicMasterData !== 'undefined' ? goldClassicMasterData : {},
+            lastUpdated: new Date().toISOString()
         };
 
-        // حفظ محلياً للتأمين الفوري
-        localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
+        // الحفظ الفوري في ذاكرة المتصفح
+        localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(dataPayload.masterLedger));
+        localStorage.setItem('coffee_gold_classic_history', JSON.stringify(dataPayload.goldClassicMasterData));
 
-        // إرسال مباشر للرابط الجديد
-        await fetch('https://script.google.com/macros/s/AKfycbyvdXE8xRxTw8rt9YRcLAjAr-87crLhcn7Ls5209j-1yc-drSawH4bGWCC9sSxPM9Ly/exec', {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dataPayload)
-        });
+        // تحميل ملف احتياطي تلقائي (اختياري عشان تضمن داتا مصنعك محفوظة دائماً على جهازك)
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataPayload, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", "coffee_factory_backup_" + new Date().toISOString().slice(0,10) + ".json");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
 
-        alert('✅ تم الحفظ على السحابة ومحلياً بنجاح صاروخي! 🚀');
+        alert('✅ تم الحفظ بنجاح صاروخي على الجهاز وتم تصدير نسخة الاحتياط! 🚀');
     } catch (e) {
-        alert('⚠️ تم الحفظ محلياً على الجهاز.');
+        alert('⚠️ حدث خطأ أثناء الحفظ.');
     }
 }
 
-// 2. دالة التحديث السريع من الرابط الجديد
-async function silentAutoLoad() {
+// 2. دالة التحديث / الاستعادة (تسترجع الداتا فوراً من الجهاز أو من ملف احتياطي تختاره)
+function silentAutoLoad() {
     try {
-        const response = await fetch('https://script.google.com/macros/s/AKfycbyvdXE8xRxTw8rt9YRcLAjAr-87crLhcn7Ls5209j-1yc-drSawH4bGWCC9sSxPM9Ly/exec?t=' + new Date().getTime(), { cache: 'no-store' });
-        const data = await response.json();
+        const localData = localStorage.getItem('coffee_ops_master_ledger');
+        const localGold = localStorage.getItem('coffee_gold_classic_history');
         
-        if (data && data.masterLedger) {
-            masterLedger = JSON.parse(data.masterLedger || '[]');
-            if (data.goldClassic) {
-                goldClassicMasterData = JSON.parse(data.goldClassic || '{}');
+        if (localData) {
+            masterLedger = JSON.parse(localData);
+            if (localGold) {
+                goldClassicMasterData = JSON.parse(localGold);
             }
-            
-            localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
-            localStorage.setItem('coffee_gold_classic_history', JSON.stringify(goldClassicMasterData));
             
             if (typeof filterLedgerTable === 'function') filterLedgerTable();
             if (typeof updateSummaryCards === 'function') updateSummaryCards();
             
-            alert('✅ تم سحب التحديثات من السحابة في أجزاء من الثانية! ⚡');
+            alert('✅ تم استعادة وتحديث البيانات من الذاكرة المحلية في أقل من ثانية! ⚡');
         } else {
-            alert('ℹ️ السحابة فارغة حالياً.');
+            alert('ℹ️ لا توجد بيانات مخزنة محلياً حالياً.');
         }
     } catch (e) {
-        alert('❌ فشل سحب البيانات، تأكد من الاتصال.');
+        alert('❌ فشل في استعادة البيانات.');
     }
 }
         // نافذة تصفح واختيار ملف الأرشيف للتحديث اليدوي للأجهزة الأخرى
