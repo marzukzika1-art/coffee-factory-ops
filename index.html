@@ -7200,8 +7200,14 @@ function printInventoryReport(type) {
             printWindow.document.close();
         }
 
-// 1. دالة الحفظ السريع (تحفظ محلياً وتنزلك نسخة ملف احتياطي سحابي لو حابب)
-function silentAutoSave() {
+// بيانات الربط المباشر مع جيت هب أونلاين
+const GH_USER = "marzukzika1-art"; 
+const GH_REPO = "coffee-factory-ops"; 
+const GH_FILE_PATH = "data.json"; 
+const GH_TOKEN = "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";
+
+// 1. دالة الحفظ أونلاين على جيت هب مباشرة
+async function silentAutoSave() {
     try {
         const dataPayload = {
             masterLedger: typeof masterLedger !== 'undefined' ? masterLedger : [],
@@ -7209,46 +7215,76 @@ function silentAutoSave() {
             lastUpdated: new Date().toISOString()
         };
 
-        // الحفظ الفوري في ذاكرة المتصفح
-        localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(dataPayload.masterLedger));
-        localStorage.setItem('coffee_gold_classic_history', JSON.stringify(dataPayload.goldClassicMasterData));
+        const jsonContent = JSON.stringify(dataPayload, null, 2);
+        const contentEncoded = btoa(unescape(encodeURIComponent(jsonContent))); // تشفير Base64 عشان جيت هب
 
-        // تحميل ملف احتياطي تلقائي (اختياري عشان تضمن داتا مصنعك محفوظة دائماً على جهازك)
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataPayload, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", "coffee_factory_backup_" + new Date().toISOString().slice(0,10) + ".json");
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
+        const apiUrl = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/contents/${GH_FILE_PATH}`;
 
-        alert('✅ تم الحفظ بنجاح صاروخي على الجهاز وتم تصدير نسخة الاحتياط! 🚀');
+        // أولاً: نتأكد لو الملف موجود عشان نجيب الـ sha بتاع التعديل
+        let fileSha = "";
+        const getCheck = await fetch(apiUrl, {
+            headers: { 'Authorization': `token ${GH_TOKEN}` }
+        });
+        if (getCheck.ok) {
+            const fileData = await getCheck.json();
+            fileSha = fileData.sha;
+        }
+
+        // ثانياً: نبعت طلب الحفظ/التحديث للملف أونلاين
+        const response = await fetch(apiUrl, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${GH_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: "Update factory data online via app",
+                content: contentEncoded,
+                sha: fileSha // مطلوب لو الملف موجود عشان يحدثه
+            })
+        });
+
+        if (response.ok) {
+            alert('✅ تم حفظ البيانات أونلاين على جيت هب بنجاح صاروخي! 🚀');
+        } else {
+            alert('❌ فشل الحفظ أونلاين، تأكد من صحة التوكن.');
+        }
     } catch (e) {
-        alert('⚠️ حدث خطأ أثناء الحفظ.');
+        alert('❌ حدث خطأ في الاتصال بسيرفر جيت هب.');
     }
 }
 
-// 2. دالة التحديث / الاستعادة (تسترجع الداتا فوراً من الجهاز أو من ملف احتياطي تختاره)
-function silentAutoLoad() {
+// 2. دالة التحديث / الاستعادة أونلاين من جيت هب
+async function silentAutoLoad() {
     try {
-        const localData = localStorage.getItem('coffee_ops_master_ledger');
-        const localGold = localStorage.getItem('coffee_gold_classic_history');
+        const apiUrl = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/contents/${GH_FILE_PATH}`;
         
-        if (localData) {
-            masterLedger = JSON.parse(localData);
-            if (localGold) {
-                goldClassicMasterData = JSON.parse(localGold);
+        const response = await fetch(apiUrl, {
+            headers: { 'Authorization': `token ${GH_TOKEN}` },
+            cache: 'no-store'
+        });
+
+        if (response.ok) {
+            const fileData = await response.json();
+            const decodedContent = decodeURIComponent(escape(atob(fileData.content)));
+            const parsedData = JSON.parse(decodedContent);
+
+            if (parsedData.masterLedger) {
+                masterLedger = parsedData.masterLedger;
             }
-            
+            if (parsedData.goldClassicMasterData) {
+                goldClassicMasterData = parsedData.goldClassicMasterData;
+            }
+
             if (typeof filterLedgerTable === 'function') filterLedgerTable();
             if (typeof updateSummaryCards === 'function') updateSummaryCards();
-            
-            alert('✅ تم استعادة وتحديث البيانات من الذاكرة المحلية في أقل من ثانية! ⚡');
+
+            alert('✅ تم سحب وتحديث البيانات أونلاين من جيت هب في أقل من ثانية! ⚡');
         } else {
-            alert('ℹ️ لا توجد بيانات مخزنة محلياً حالياً.');
+            alert('ℹ️ لا يوجد ملف بيانات محفوظ أونلاين حتى الآن.');
         }
     } catch (e) {
-        alert('❌ فشل في استعادة البيانات.');
+        alert('❌ فشل سحب البيانات من جيت هب.');
     }
 }
         // نافذة تصفح واختيار ملف الأرشيف للتحديث اليدوي للأجهزة الأخرى
