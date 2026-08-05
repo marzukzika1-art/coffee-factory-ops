@@ -7231,11 +7231,12 @@ function silentAutoSave() {
     }
 }
 
-// 2. دالة التحديث / الاستعادة أونلاين من جيت هب (بتسحب أحدث داتا لسه مرفوعة أونلاين)
+// دالة التحديث / الاستعادة أونلاين المحدثة والآمنة 100%
 async function silentAutoLoad() {
     try {
-        // بنسحب الداتا مباشرة من رابط جيت هب المباشر مع إضافة رقم عشوائي عشان المتصفح ميسحبش نسخة قديمة من الذاكرة
-        const response = await fetch(GITHUB_DATA_URL + '?t=' + new Date().getTime(), { cache: 'no-store' });
+        // بنضيف رقم عشوائي ووقت عشان المتصفح ميسحبش نسخة قديمة مخزنة
+        const timestamp = new Date().getTime();
+        const response = await fetch(`https://raw.githubusercontent.com/marzukzika1-art/coffee-factory-ops/main/data.json?t=${timestamp}`);
         
         if (response.ok) {
             const data = await response.json();
@@ -7246,22 +7247,22 @@ async function silentAutoLoad() {
                     goldClassicMasterData = data.goldClassicMasterData;
                 }
                 
-                // تحديث الذاكرة المحلية للجهاز أيضاً لضمان السرعة
+                // تحديث الذاكرة المحلية كاحتياطي للسرعة
                 localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
                 localStorage.setItem('coffee_gold_classic_history', JSON.stringify(goldClassicMasterData));
                 
                 if (typeof filterLedgerTable === 'function') filterLedgerTable();
                 if (typeof updateSummaryCards === 'function') updateSummaryCards();
                 
-                alert('✅ تم سحب وتحديث البيانات أونلاين من جيت هب في أجزاء من الثانية! ⚡');
+                alert('✅ تم سحب وتحديث البيانات أونلاين من جيت هب بنجاح تام! ⚡');
             } else {
-                alert('ℹ️ ملف البيانات أونلاين فارغ حالياً.');
+                alert('ℹ️ ملف البيانات أونلاين فارغ أو بصيغة غير صحيحة.');
             }
         } else {
-            alert('❌ تعذر الاتصال بملف البيانات أونلاين.');
+            alert('❌ تعذر الوصول لملف البيانات، تأكد أن الملف مرفوع في الملف الرئيسي للمستودع.');
         }
     } catch (e) {
-        alert('❌ فشل سحب البيانات، تأكد من الاتصال بالإنترنت.');
+        alert('❌ فشل سحب البيانات بسبب إعدادات المتصفح أو الاتصال.');
     }
 }
         // نافذة تصفح واختيار ملف الأرشيف للتحديث اليدوي للأجهزة الأخرى
