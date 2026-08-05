@@ -7231,40 +7231,42 @@ function silentAutoSave() {
     }
 }
 
-// دالة التحديث / الاستعادة أونلاين المحدثة والآمنة 100%
-async function silentAutoLoad() {
+// دالة الاستعادة والتحديث السريعة الآمنة 100%
+function silentAutoLoad() {
     try {
-        // بنضيف رقم عشوائي ووقت عشان المتصفح ميسحبش نسخة قديمة مخزنة
-        const timestamp = new Date().getTime();
-        const response = await fetch(`https://raw.githubusercontent.com/marzukzika1-art/coffee-factory-ops/main/data.json?t=${timestamp}`);
-        
-        if (response.ok) {
-            const data = await response.json();
-            
-            if (data && data.masterLedger) {
-                masterLedger = data.masterLedger;
-                if (data.goldClassicMasterData) {
-                    goldClassicMasterData = data.goldClassicMasterData;
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = function(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (importedData.masterLedger) {
+                        masterLedger = importedData.masterLedger;
+                        localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
+                    }
+                    if (importedData.goldClassicMasterData) {
+                        goldClassicMasterData = importedData.goldClassicMasterData;
+                        localStorage.setItem('coffee_gold_classic_history', JSON.stringify(goldClassicMasterData));
+                    }
+                    if (typeof filterLedgerTable === 'function') filterLedgerTable();
+                    if (typeof updateSummaryCards === 'function') updateSummaryCards();
+                    alert('✅ تم تحديث واستعادة البيانات بنجاح صاروخي! 🚀');
+                } catch (err) {
+                    alert('❌ ملف البيانات غير صالح.');
                 }
-                
-                // تحديث الذاكرة المحلية كاحتياطي للسرعة
-                localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
-                localStorage.setItem('coffee_gold_classic_history', JSON.stringify(goldClassicMasterData));
-                
-                if (typeof filterLedgerTable === 'function') filterLedgerTable();
-                if (typeof updateSummaryCards === 'function') updateSummaryCards();
-                
-                alert('✅ تم سحب وتحديث البيانات أونلاين من جيت هب بنجاح تام! ⚡');
-            } else {
-                alert('ℹ️ ملف البيانات أونلاين فارغ أو بصيغة غير صحيحة.');
-            }
-        } else {
-            alert('❌ تعذر الوصول لملف البيانات، تأكد أن الملف مرفوع في الملف الرئيسي للمستودع.');
-        }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
     } catch (e) {
-        alert('❌ فشل سحب البيانات بسبب إعدادات المتصفح أو الاتصال.');
+        alert('❌ حدث خطأ أثناء التحديث.');
     }
 }
+
+		
         // نافذة تصفح واختيار ملف الأرشيف للتحديث اليدوي للأجهزة الأخرى
         function openQuickArchiveBrowser() {
             const input = document.createElement('input');
