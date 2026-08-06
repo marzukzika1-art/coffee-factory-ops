@@ -6940,48 +6940,72 @@ function openCleanInventoryModal() {
             link.click();
         }
 
-        window.addEventListener('DOMContentLoaded', async () => {
-    // 1. جلب البيانات أونلاين من Google Sheets عند فتح الصفحة
-    try {
-        const response = await fetch('https://script.google.com/macros/s/AKfycbzbSb4CojOP_fyN6oEzxVktOMFAZpxQr21S8Q0Dldk1maw92su_AdFBGEsRO_5gzGQ/exec?t=' + new Date().getTime(), { cache: 'no-store' });
-        const data = await response.json();
-        
-        if (data && data.masterLedger) {
-            masterLedger = JSON.parse(data.masterLedger || '[]');
-            if (data.goldClassic) {
-                goldClassicMasterData = JSON.parse(data.goldClassic || '{}');
+        window.addEventListener('DOMContentLoaded', () => {
+            // 1. أول خطوة: سحب أحدث بيانات صالة الإنتاج من السيرفر فوراً عند الفتح لمنع تعارض الأجهزة
+            fetch('http://127.0.0.1:3456/load')
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        masterLedger = data;
+                        localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
+                        console.log('🔄 تم جلب أحدث بيانات صالة الإنتاج بنجاح عند الفتح.');
+                    } else {
+                        const stored = localStorage.getItem('coffee_ops_master_ledger');
+                        if (stored) { try { masterLedger = JSON.parse(stored); } catch(e) { masterLedger = []; } }
+                        else { masterLedger = []; }
+                    }
+                })
+                .catch(() => {
+                    const stored = localStorage.getItem('coffee_ops_master_ledger');
+                    if (stored) { try { masterLedger = JSON.parse(stored); } catch(e) { masterLedger = []; } }
+                    else { masterLedger = []; }
+                })
+                .finally(() => {
+                    // 2. تهيئة وتحديث الواجهة والجداول بعد جلب الداتا
+                    resetFilters();
+                    const storedBatches = localStorage.getItem('coffee_ops_batch_map');
+                    if (storedBatches) { try { batchMap = JSON.parse(storedBatches); } catch(e) { batchMap = {}; } }
+
+                    const currentMonth = new Date().toISOString().slice(0, 7);
+                    const grindersMonthInput = document.getElementById('grinders-report-month');
+                    if (grindersMonthInput) grindersMonthInput.value = currentMonth;
+                    
+                    const pkgMonthInput = document.getElementById('pkg-report-month');
+                    if (pkgMonthInput) pkgMonthInput.value = currentMonth;
+
+                    if (typeof updateAdditionItemsList === 'function') updateAdditionItemsList();
+                    if (typeof populateFilterDropdowns === 'function') populateFilterDropdowns();
+                    if (typeof filterLedgerTable === 'function') filterLedgerTable();
+                    if (typeof updateSummaryCards === 'function') updateSummaryCards();
+                    if (typeof renderPage2FloorInventory === 'function') renderPage2FloorInventory();
+                    if (typeof renderGrindersReport === 'function') renderGrindersReport();
+                    if (typeof renderPackagingReport === 'function') renderPackagingReport();
+
+                    // 3. تنظيف وحفظ التكويد والترميز جذرياً لمنع تشويش الحروف العربية
+                    setTimeout(() => {
+                        if (typeof masterLedger !== 'undefined' && Array.isArray(masterLedger)) {
+                            masterLedger.forEach(r => {
+                                if (r.item && typeof r.item === 'string') r.item = r.item.replace(/\uFFFD/g, '').trim();
+                                if (r.dispatchMachine && typeof r.dispatchMachine === 'string') r.dispatchMachine = r.dispatchMachine.replace(/\uFFFD/g, '').trim();
+                                if (r.roaster && typeof r.roaster === 'string') r.roaster = r.roaster.replace(/\uFFFD/g, '').trim();
+                                if (r.grinderName && typeof r.grinderName === 'string') r.grinderName = r.grinderName.replace(/\uFFFD/g, '').trim();
+                            });
+                            if (typeof saveState === 'function') saveState();
+                        }
+                    }, 300);
+                });
+        });
+
+        // حدث النقر الخاص بالتعديل المباشر في الصفوف
+        document.addEventListener('click', function(event) {
+            const saveBtn = event.target.closest('.btn-save-row');
+            if (saveBtn) {
+                const id = saveBtn.getAttribute('data-id');
+                if (id) {
+                    saveInlineEdit(id);
+                }
             }
-            localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
-            console.log('🔄 تم جلب أحدث بيانات صالة الإنتاج من السحابة بنجاح عند الفتح.');
-        } else {
-            const stored = localStorage.getItem('coffee_ops_master_ledger');
-            if (stored) { try { masterLedger = JSON.parse(stored); } catch(e) { masterLedger = []; } }
-        }
-    } catch (err) {
-        const stored = localStorage.getItem('coffee_ops_master_ledger');
-        if (stored) { try { masterLedger = JSON.parse(stored); } catch(e) { masterLedger = []; } }
-        else { masterLedger = []; }
-    } finally {
-        resetFilters();
-        const storedBatches = localStorage.getItem('coffee_ops_batch_map');
-        if (storedBatches) { try { batchMap = JSON.parse(storedBatches); } catch(e) { batchMap = {}; } }
-
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        const grindersMonthInput = document.getElementById('grinders-report-month');
-        if (grindersMonthInput) grindersMonthInput.value = currentMonth;
-        
-        const pkgMonthInput = document.getElementById('pkg-report-month');
-        if (pkgMonthInput) pkgMonthInput.value = currentMonth;
-
-        if (typeof updateAdditionItemsList === 'function') updateAdditionItemsList();
-        if (typeof populateFilterDropdowns === 'function') populateFilterDropdowns();
-        if (typeof filterLedgerTable === 'function') filterLedgerTable();
-        if (typeof updateSummaryCards === 'function') updateSummaryCards();
-        if (typeof renderPage2FloorInventory === 'function') renderPage2FloorInventory();
-        if (typeof renderGrindersReport === 'function') renderGrindersReport();
-        if (typeof renderPackagingReport === 'function') renderPackagingReport();
-    }
-});
+        });
 
 function printInventoryReport(type) {
             // تصفية السجلات حسب النوع (محمص فقط أو تحت التشغيل فقط)
@@ -7200,74 +7224,51 @@ function printInventoryReport(type) {
             printWindow.document.close();
         }
 
-// رابط الـ API الثابت الخاص بـ npoint للمصنع
-const NPOINT_URL = "https://api.npoint.io/72e2f8088a6698bcced0";
+// 1. دالة الحفظ اليدوي (تعمل فقط لو سيرفر Node.js شغال، وإلا تنبه المستخدم)
+        async function silentAutoSave() {
+            try {
+                const dataPayload = {
+                    ledgerData: typeof masterLedger !== 'undefined' ? masterLedger : [],
+                    batchMapData: typeof batchMap !== 'undefined' ? batchMap : {}
+                };
 
-// 1. دالة الحفظ أونلاين (تستبدل الملف بالكامل أونلاين بضغطة زر)
-async function silentAutoSave() {
-    try {
-        const dataPayload = {
-            masterLedger: typeof masterLedger !== 'undefined' ? masterLedger : [],
-            goldClassicMasterData: typeof goldClassicMasterData !== 'undefined' ? goldClassicMasterData : {},
-            lastUpdated: new Date().toISOString()
-        };
+                const response = await fetch('http://127.0.0.1:3456/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dataPayload)
+                });
 
-        const response = await fetch(NPOINT_URL, {
-            method: 'POST', // أو PUT حسب المنصة، npoint بتقبل POST لتحديث محتوى الـ Bin
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(dataPayload)
-        });
-
-        if (response.ok) {
-            // حفظ نسخة محلية أيضاً لضمان السرعة القصوى
-            localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(dataPayload.masterLedger));
-            localStorage.setItem('coffee_gold_classic_history', JSON.stringify(dataPayload.goldClassicMasterData));
-            
-            alert('✅ تم حفظ واستبدال البيانات أونلاين على السيرفر بنجاح صاروخي! 🚀');
-        } else {
-            alert('❌ فشل الحفظ أونلاين، تحقق من الاتصال.');
-        }
-    } catch (e) {
-        alert('❌ حدث خطأ أثناء الاتصال بسيرفر الحفظ.');
-    }
-}
-
-// 2. دالة التحديث / الاستعادة أونلاين (تسحب أحدث داتا من نفس الرابط الثابت)
-async function silentAutoLoad() {
-    try {
-        const timestamp = new Date().getTime();
-        const response = await fetch(NPOINT_URL + '?t=' + timestamp, { cache: 'no-store' });
-        
-        if (response.ok) {
-            const data = await response.json();
-            
-            if (data && data.masterLedger) {
-                masterLedger = data.masterLedger;
-                if (data.goldClassicMasterData) {
-                    goldClassicMasterData = data.goldClassicMasterData;
+                if (response.ok) {
+                    localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
+                    alert('✅ تم الحفظ بنجاح!');
+                } else {
+                    alert('⚠️ عذراً، لا يوجد اتصال بسيرفر الحفظ المحلي (Node.js غير عامل على هذا الجهاز). تعديلاتك محلية فقط ولن تؤثر على الملف الأساسي.');
                 }
-                
-                // تحديث الذاكرة المحلية للجهاز للسرعة
-                localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
-                localStorage.setItem('coffee_gold_classic_history', JSON.stringify(goldClassicMasterData));
-                
-                if (typeof filterLedgerTable === 'function') filterLedgerTable();
-                if (typeof updateSummaryCards === 'function') updateSummaryCards();
-                
-                alert('✅ تم سحب وتحديث البيانات أونلاين من الرابط السحابي في أقل من ثانية! ⚡');
-            } else {
-                alert('ℹ️ البيانات أونلاين فارغة حالياً.');
+            } catch (e) {
+                alert('ℹ️ هذا الجهاز مخصص للمتابعة والعرض فقط (غير متصل بسيرفر الحفظ). يمكنك استخدام زر "تحديث" لرفع أحدث ملف متابعة.');
             }
-        } else {
-            alert('❌ فشل سحب البيانات من السيرفر.');
         }
-    } catch (e) {
-        alert('❌ فشل الاتصال بالإنترنت أثناء التحديث.');
-    }
-}
-		
+
+        // 2. دالة التحديث اليدوي (مناسبة للأجهزة اللي مش عليها سيرفر: ترفع الملف وتحدث الشاشة)
+        function silentAutoLoad() {
+            // محاولة جلب البيانات من السيرفر المحلي أولاً (لو الجهاز عليه Node.js)
+            fetch('http://127.0.0.1:3456/load?t=' + new Date().getTime(), { cache: 'no-store' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        processImportedData(data);
+                        alert('✅ تم سحب أحدث بيانات من السيرفر المحلي بنجاح!');
+                    } else {
+                        // لو السيرفر مش موجود، نفتح نافذة تخليه يختار أحدث ملف JSON جاله من المسؤول
+                        openQuickArchiveBrowser();
+                    }
+                })
+                .catch(() => {
+                    // لو فشل الاتصال بالسيرفر، نفتح متصفح الملفات لاختيار ملف الـ JSON يدوياً للتحديث
+                    openQuickArchiveBrowser();
+                });
+        }
+
         // نافذة تصفح واختيار ملف الأرشيف للتحديث اليدوي للأجهزة الأخرى
         function openQuickArchiveBrowser() {
             const input = document.createElement('input');
