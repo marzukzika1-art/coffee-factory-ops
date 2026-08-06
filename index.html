@@ -15,6 +15,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- STREAMING_CHUNK: Configuring Tailwind Theme Variables -->
     <script>
@@ -1002,7 +1003,7 @@
             </div>
 
             <!-- SUB-TAB 1: PRINTABLE INVOICE VIEW (No KPI Cards, Single Page) -->
-            <div id<div id="p3-subtab-invoice-content" class="space-y-4 print-only-container">
+            <div id="p3-subtab-invoice-content" class="space-y-4 print-only-container">
         <div class="bg-white p-4 sm:p-6 rounded-3xl shadow-xl border-t-8 border-gold space-y-4 print:border-t-0 print:p-0">
             
             <!-- هيدر الطباعة المنظم (يمين ويسار) -->
@@ -5996,21 +5997,11 @@ function openCleanInventoryModal() {
             // 2. تطبيق القاعدة الذكية: لو مفيش بحث، هات كل المحمص وتحت التشغيل + آخر 10 أيام فقط من تم الصرف
             let displayData = filtered;
             if (!isSearching && filtered.length > 0) {
-                // إيجاد أحدث تاريخ صرف موجود في السجلات
-                const dispatchDates = filtered
-                    .filter(r => (r.status || '').trim() === 'تم الصرف' || (r.status || '').trim() === 'منصرف')
-                    .map(r => normalizeDateStr(r.dispatchDate))
-                    .filter(Boolean)
-                    .sort();
-
-                let tenDaysAgoStr = '';
-                if (dispatchDates.length > 0) {
-                    const latestDateStr = dispatchDates[dispatchDates.length - 1];
-                    const latestDate = new Date(latestDateStr);
-                    const tenDaysAgo = new Date(latestDate);
-                    tenDaysAgo.setDate(latestDate.getDate() - 10);
-                    tenDaysAgoStr = tenDaysAgo.toISOString().split('T')[0];
-                }
+                // استخدام تاريخ اليوم الحالي كمرجع فوري وسريع لمنع أي بطء في الحسابات
+const today = new Date();
+const tenDaysAgo = new Date(today);
+tenDaysAgo.setDate(today.getDate() - 10);
+const tenDaysAgoStr = tenDaysAgo.toISOString().split('T')[0];
 
                 displayData = filtered.filter(r => {
                     const st = (r.status || '').trim();
@@ -7224,50 +7215,143 @@ function printInventoryReport(type) {
             printWindow.document.close();
         }
 
-// 1. دالة الحفظ اليدوي (تعمل فقط لو سيرفر Node.js شغال، وإلا تنبه المستخدم)
-        async function silentAutoSave() {
-            try {
-                const dataPayload = {
-                    ledgerData: typeof masterLedger !== 'undefined' ? masterLedger : [],
-                    batchMapData: typeof batchMap !== 'undefined' ? batchMap : {}
-                };
+// بيانات الربط الخاصة بمشروعك على Supabase
+const SUPABASE_URL = "https://rpqtpqnuzoqxqdmsftgs.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_gQVPV56_Sq-fMdmVA8ZmZA_pmPlRJYv";
 
-                const response = await fetch('http://127.0.0.1:3456/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dataPayload)
-                });
+// تهيئة عميل Supabase
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-                if (response.ok) {
-                    localStorage.setItem('coffee_ops_master_ledger', JSON.stringify(masterLedger));
-                    alert('✅ تم الحفظ بنجاح!');
+
+// 1. دالة الحفظ الذكي والشامل لكل الأعمدة والبيانات
+async function silentAutoSave() {
+    try {
+        if (!Array.isArray(masterLedger) || masterLedger.length === 0) {
+            alert('⚠️ لا توجد بيانات لحفظها.');
+            return;
+        }
+
+        const uniqueMap = new Map();
+
+        // 1. فلترة وتصفية الذاكرة بالكامل لمنع أي تكرار داخلي
+        masterLedger.forEach((row) => {
+            let lot = String(row.lot || 'nolot').trim();
+            let item = String(row.item || 'noitem').trim();
+            let roastDate = String(row.roastDate || 'nodate').trim();
+            let pallet = String(row.pallet || 'nopallet').trim();
+            let roaster = String(row.roaster || 'noroaster').trim();
+            let roastWeight = Number(row.roastWeight) || 0;
+            let grindDate = String(row.grindDate || 'nogrind').trim();
+            let grinderName = String(row.grinderName || 'nogrinder').trim();
+
+            // بصمة ذكية فريدة وثابتة
+            let smartId = `L_${lot}_I_${item}_RD_${roastDate}_P_${pallet}_R_${roaster}_RW_${roastWeight}_GD_${grindDate}_G_${grinderName}`;
+            smartId = smartId.replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_');
+
+            // الـ Map هتضمن الاحتفاظ بنسخة واحدة فريدة لكل تشغيلة حتى لو مكررة آلاف المرات
+            uniqueMap.set(smartId, {
+                id: smartId,
+                status: row.status || '',
+                lot: row.lot || '',
+                item: row.item || '',
+                pallet: row.pallet || '',
+                roaster: row.roaster || '',
+                roastDate: row.roastDate || '',
+                roastWeight: Number(row.roastWeight) || 0,
+                grindDate: row.grindDate || '',
+                groundWeight: Number(row.groundWeight) || 0,
+                grinderName: row.grinderName || '',
+                bagCount: Number(row.bagCount) || 0,
+                dispatchMachine: row.dispatchMachine || '',
+                dispatchDate: row.dispatchDate || '',
+                dispatchWeight: Number(row.dispatchWeight) || 0
+            });
+        });
+
+        // تحويل البيانات المصفاة مصفوفة نظيفة تماماً
+        const cleanedData = Array.from(uniqueMap.values());
+
+        // تحديث الذاكرة المحلية الحالية للسيستم بالبيانات الصافية بس عشان متتكررش تاني
+        masterLedger = cleanedData;
+
+        // 2. تفريغ الجدول في Supabase أولاً أو عمل Upsert نظيف
+        // (لو حابب نضمن إن الجدول ينضف تماماً قبل ما يحط الصافي، ممكن نمسحه ونبعت الصافي)
+        const { error: deleteError } = await supabaseClient
+            .from('factory_ledger')
+            .delete()
+            .neq('id', '0'); // حذف كل السطور القديمة المؤقتة لو حابب نبدأ على نظافة
+
+        // 3. رفع البيانات الصافية بالكامل للقاعدة
+        const { error } = await supabaseClient
+            .from('factory_ledger')
+            .upsert(cleanedData, { onConflict: 'id' });
+
+        if (error) throw error;
+
+        alert(`✅تم حفظ (${cleanedData.length}) بنجاح`);
+        
+        // تحديث الجداول والواجهة
+        try { if (typeof renderMasterTable === 'function') renderMasterTable(masterLedger); } catch(err) {}
+    } catch (e) {
+        console.error(e);
+        alert('❌ فشل الحفظ: ' + e.message);
+    }
+}
+// 2. دالة الاستعادة الآمنة والسريعة من Supabase
+async function silentAutoLoad() {
+    try {
+        let allData = [];
+        let rangeSize = 1000;
+        let from = 0;
+        let to = rangeSize - 1;
+        let keepFetching = true;
+
+        // سحب البيانات على دفعات من Supabase
+        while (keepFetching) {
+            const { data, error } = await supabaseClient
+                .from('factory_ledger')
+                .select('*')
+                .range(from, to);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData = allData.concat(data);
+                if (data.length < rangeSize) {
+                    keepFetching = false; 
                 } else {
-                    alert('⚠️ عذراً، لا يوجد اتصال بسيرفر الحفظ المحلي (Node.js غير عامل على هذا الجهاز). تعديلاتك محلية فقط ولن تؤثر على الملف الأساسي.');
+                    from += rangeSize;
+                    to += rangeSize;
                 }
-            } catch (e) {
-                alert('ℹ️ هذا الجهاز مخصص للمتابعة والعرض فقط (غير متصل بسيرفر الحفظ). يمكنك استخدام زر "تحديث" لرفع أحدث ملف متابعة.');
+            } else {
+                keepFetching = false;
             }
         }
 
-        // 2. دالة التحديث اليدوي (مناسبة للأجهزة اللي مش عليها سيرفر: ترفع الملف وتحدث الشاشة)
-        function silentAutoLoad() {
-            // محاولة جلب البيانات من السيرفر المحلي أولاً (لو الجهاز عليه Node.js)
-            fetch('http://127.0.0.1:3456/load?t=' + new Date().getTime(), { cache: 'no-store' })
-                .then(res => res.json())
-                .then(data => {
-                    if (data && data.length > 0) {
-                        processImportedData(data);
-                        alert('✅ تم سحب أحدث بيانات من السيرفر المحلي بنجاح!');
-                    } else {
-                        // لو السيرفر مش موجود، نفتح نافذة تخليه يختار أحدث ملف JSON جاله من المسؤول
-                        openQuickArchiveBrowser();
-                    }
-                })
-                .catch(() => {
-                    // لو فشل الاتصال بالسيرفر، نفتح متصفح الملفات لاختيار ملف الـ JSON يدوياً للتحديث
-                    openQuickArchiveBrowser();
-                });
+        if (allData.length > 0) {
+            masterLedger = allData;
+            
+            // الحل الذكي: أول ما يخلص استعادة، يعمل تصفير للفلاتر في الخلفية عشان الجدول يفتح خفيف ومنغير لاج
+            try {
+                if (typeof resetFilters === 'function') {
+                    resetFilters(); // استبدل resetFilters باسم دالة إعادة تعيين الفلاتر عندك لو اسمها مختلف
+                } else if (typeof filterLedgerTable === 'function') {
+                    filterLedgerTable();
+                }
+            } catch(err) { 
+                console.warn(err); 
+            }
+
+            alert(`✅ تم استعاده البيانات بنجاح (${allData.length} سجل)! `);
+        } else {
+            alert('⚠️ الجدول فارغ حالياً.');
         }
+    } catch (e) {
+        console.error(e);
+        alert('❌ فشل الاستعادة: ' + e.message);
+    }
+}
+
 
         // نافذة تصفح واختيار ملف الأرشيف للتحديث اليدوي للأجهزة الأخرى
         function openQuickArchiveBrowser() {
